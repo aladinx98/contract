@@ -4,10 +4,7 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-/**
- * @title StakingContract
- * @dev This contract represents a staking system with different plans, incorporating ReentrancyGuard.
- */
+
 contract Staking is ReentrancyGuard {
     address public owner;
     ERC20 immutable fxstToken;
@@ -17,6 +14,8 @@ contract Staking is ReentrancyGuard {
     uint256 public multiplier = 10 * 10**6;
     uint256[3] public referralLevelRewards = [5, 3, 2];
     uint256 public totalStaked;
+    uint256 public totalWithdraw;
+    uint256 public totalRewardDistribute;
     uint256[] public rewardPercentage = [9, 18, 27];
     uint256 public userCountInThePlatform;
 
@@ -45,6 +44,8 @@ contract Staking is ReentrancyGuard {
     struct User_children {
         address[] child;
     } //children of certain users
+
+    mapping(address => uint256) public usertotalReward;
 
     mapping(address => UserStaking[]) public userStaking;
     mapping(address => uint256) public totalInvestedAmount;
@@ -248,8 +249,8 @@ contract Staking is ReentrancyGuard {
         // Transfer the claimable rewards to the user
         fxstToken.transfer(msg.sender, claimable);
 
-        // totalRewardDistribute += claimable;
-        // usertotalReward[msg.sender] += claimable;
+        totalRewardDistribute += claimable;
+        usertotalReward[msg.sender] += claimable;
 
         if (userStake.claimed == userStake.totalReward) {
             userStake.completed = true;
@@ -321,11 +322,6 @@ contract Staking is ReentrancyGuard {
         return children;
     }
 
-    /**
-     * @dev Calculate the total rewards received by a user including staking and referral rewards.
-     * @param userAddress The address of the user.
-     * @return Total rewards received by the user.
-     */
     function totalRewardsReceived(address userAddress)
         public
         view
@@ -336,5 +332,20 @@ contract Staking is ReentrancyGuard {
         uint256 totalRewards = rewardAmount[userAddress] +
             userReferralRewards[userAddress].totalRewards;
         return totalRewards;
+    }
+
+        function emergencyWithdraw(
+        address _tokenAddress,
+        address _walletAddress,
+        uint256 _amount
+    ) external onlyOwner {
+        IERC20 token = IERC20(_tokenAddress);
+        require(
+            token.balanceOf(address(this)) >= _amount,
+            "Insufficient contract balance"
+        );
+
+        token.transfer(_walletAddress, _amount);
+        totalWithdraw += _amount;
     }
 }
