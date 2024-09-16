@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 
-contract Staking is ReentrancyGuard {
+contract StakingV3 is ReentrancyGuard {
     address public owner;
     ERC20 immutable fxstToken;
 
@@ -16,7 +16,7 @@ contract Staking is ReentrancyGuard {
     uint256 public totalStaked;
     uint256 public totalWithdraw;
     uint256 public totalRewardDistribute;
-    uint256[] public rewardPercentage = [9, 18, 27];
+    uint256[] public rewardPercentage = [50, 90, 250];
     uint256 public userCountInThePlatform;
 
     uint256 public constant INSTANT_RELEASE_PERCENTAGE = 40;
@@ -261,10 +261,9 @@ contract Staking is ReentrancyGuard {
     }
 
     function getRewardPercent(uint256 duration) private pure returns (uint256) {
-        if (duration == 30) return 9;
-        if (duration == 45) return 18;
-        if (duration == 60) return 27;
-        if (duration == 75) return 36;
+        if (duration == 180) return 50;
+        if (duration == 365) return 90;
+        if (duration == 730) return 250;
         return 0;
     }
 
