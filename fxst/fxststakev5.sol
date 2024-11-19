@@ -4,14 +4,12 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-
 contract StakingV3 is ReentrancyGuard {
     address public owner;
     ERC20 immutable fxstToken;
 
     uint256 public constant maxReferralLimit = 3;
-    uint256 public constant MinimumStakingAmount = 100 * (10**6);
-    // uint256 public multiplier = 10 * 10**6;
+    uint256 public MinimumStakingAmount;
     uint256[3] public referralLevelRewards = [5, 3, 2];
     uint256 public totalStaked;
     uint256 public totalWithdraw;
@@ -46,7 +44,7 @@ contract StakingV3 is ReentrancyGuard {
     } //children of certain users
 
     mapping(address => uint256) public usertotalReward;
-
+    mapping(address => uint256) public userTotalWithdraw;
     mapping(address => UserStaking[]) public userStaking;
     mapping(address => uint256) public totalInvestedAmount;
     mapping(address => uint256) public userStakingCount;
@@ -74,9 +72,10 @@ contract StakingV3 is ReentrancyGuard {
         _;
     }
 
-    constructor(address _tokenAddress) {
+    constructor(address _tokenAddress, uint256 _setInitialStakeLimit) {
         fxstToken = ERC20(_tokenAddress);
         owner = msg.sender;
+        MinimumStakingAmount = _setInitialStakeLimit;
     }
 
     function stakeTokens(
@@ -91,13 +90,10 @@ contract StakingV3 is ReentrancyGuard {
             "Invalid staking duration"
         );
         require(referrer != address(0), "Invalid referrer address");
-        // require(
-        //     tokenAmount % multiplier == 0,
-        //     "Amount must be a multiple of $10"
-        // );
+
         require(
             tokenAmount >= MinimumStakingAmount,
-            "Amount needs to be atleast 100"
+            "stake amount is less than minimum stake limit"
         );
         require(msg.sender != owner, "owner cannot stake");
 
@@ -119,10 +115,6 @@ contract StakingV3 is ReentrancyGuard {
 
         uint256 totalRewardAmount = (tokenAmount * rewardPer) / 100;
 
-        uint256 instantReward = (totalRewardAmount *
-            INSTANT_RELEASE_PERCENTAGE) / 100;
-        uint256 remainingReward = totalRewardAmount - instantReward;
-
         UserStaking memory newStake = UserStaking({
             stakedAmount: tokenAmount,
             stakingDuration: stakingDuration,
@@ -134,7 +126,7 @@ contract StakingV3 is ReentrancyGuard {
             lastClaimTime: 0,
             nextClaimTime: stakingEndTime,
             instantRewardClaimed: false,
-            remainingReward: remainingReward,
+            remainingReward: tokenAmount + totalRewardAmount,
             completed: false
         });
 
@@ -221,7 +213,7 @@ contract StakingV3 is ReentrancyGuard {
             userStake.instantRewardClaimed = true;
 
             // Update the remaining reward and timestamps after instant release
-            userStake.remainingReward = totalDistributable - instantReward;
+            userStake.remainingReward -= instantReward;
             userStake.lastClaimTime = block.timestamp;
             userStake.nextClaimTime = block.timestamp + 30 days; // Set next claim time for the 10% release
 
@@ -238,6 +230,8 @@ contract StakingV3 is ReentrancyGuard {
                 MONTHLY_RELEASE_PERCENTAGE) / 100;
             uint256 totalClaimable = monthlyReward;
 
+            userStake.remainingReward -= totalClaimable;
+
             claimable += totalClaimable;
             userStake.nextClaimTime = block.timestamp + 30 days;
             userStake.claimed += totalClaimable;
@@ -251,6 +245,7 @@ contract StakingV3 is ReentrancyGuard {
 
         totalRewardDistribute += claimable;
         usertotalReward[msg.sender] += claimable;
+        userTotalWithdraw[msg.sender] += claimable;
 
         if (userStake.claimed == userStake.totalReward) {
             userStake.completed = true;
@@ -321,6 +316,27 @@ contract StakingV3 is ReentrancyGuard {
         return children;
     }
 
+    function setOwnerAsParentForAddresses(address[] memory userAddresses)
+        external
+        onlyOwner
+    {
+        for (uint256 i = 0; i < userAddresses.length; i++) {
+            address user = userAddresses[i];
+            if (parent[user] == address(0)) {
+                parent[user] = owner;
+                setDirectAndIndirectUsers(user, owner);
+                setLevelUsers(user, owner);
+            }
+        }
+    }
+
+        function setMinStakeLimit(uint256 _minStakeLimit)
+        external
+        onlyOwner
+    {
+        MinimumStakingAmount = _minStakeLimit;
+    }
+
     function totalRewardsReceived(address userAddress)
         public
         view
@@ -333,7 +349,7 @@ contract StakingV3 is ReentrancyGuard {
         return totalRewards;
     }
 
-        function emergencyWithdraw(
+    function emergencyWithdraw(
         address _tokenAddress,
         address _walletAddress,
         uint256 _amount
